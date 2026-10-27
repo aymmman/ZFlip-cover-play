@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -10,6 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Find project folder
+        id: proj
+        run: |
+          if [ ! -f settings.gradle.kts ] && [ ! -f settings.gradle ]; then
+            for z in *.zip; do
+              if [ -f "$z" ]; then echo "Unzipping $z"; unzip -o -q "$z"; fi
+            done
+          fi
+          FOUND=$(find . -maxdepth 4 \( -name settings.gradle.kts -o -name settings.gradle \) | head -n 1)
+          if [ -z "$FOUND" ]; then
+            echo "No Gradle project found. Repo contents:"
+            ls -R | head -100
+            exit 1
+          fi
+          DIR=$(dirname "$FOUND")
+          echo "Project folder: $DIR"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v4
         with:
@@ -21,9 +39,10 @@ jobs:
           gradle-version: "8.9"
 
       - name: Build debug APK
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: gradle assembleDebug --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
           name: CoverPlay-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: ${{ steps.proj.outputs.dir }}/app/build/outputs/apk/debug/*.apk
